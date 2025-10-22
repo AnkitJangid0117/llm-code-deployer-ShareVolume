@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title></title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+  h1 { color: #2e8b57; }
+  .section { margin-top: 20px; }
+  .label { font-weight: bold; }
+  .value { font-size: 1.2em; margin-left: 10px; }
+</style>
+</head>
+<body>
+<h1 id="share-entity-name">Loading...</h1>
+<div class="section">
+  <div><span class="label">Max Shares Outstanding (Val):</span> <span id="share-max-value" class="value">Loading...</span></div>
+  <div><span class="label">Max Shares Outstanding (FY):</span> <span id="share-max-fy" class="value">Loading...</span></div>
+</div>
+<div class="section">
+  <div><span class="label">Min Shares Outstanding (Val):</span> <span id="share-min-value" class="value">Loading...</span></div>
+  <div><span class="label">Min Shares Outstanding (FY):</span> <span id="share-min-fy" class="value">Loading...</span></div>
+</div>
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+let CIK = urlParams.get('CIK') || '0001058090'; // default to CMG
+const uid = 'NTIxMDEwNjgxNDYxNjAxODA4Nzk1OTU2MzQ0MTI2NTQwNjYxMjE1ODk4NTMwMTI3NzIzMDczMDgyNDkzODE5MTcyODU5NjA4Mzg0ODk=';
+
+// Placeholder for data
+let data = null;
+
+// Function to fetch data based on CIK
+async function fetchData(cik) {
+  const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://data.sec.gov/api/xbrl/companyconcept/CIK' + cik + '/dei/EntityCommonStockSharesOutstanding.json');
+  try {
+    const response = await fetch(proxyUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const resJson = await response.json();
+    const jsonText = resJson.contents;
+    const parsed = JSON.parse(jsonText);
+    processData(parsed);
+  } catch (e) {
+    console.error('Fetch error:', e);
+    document.title = 'Error fetching data';
+    document.getElementById('share-entity-name').textContent = 'Error';
+  }
+}
+
+// Function to process fetched data
+function processData(rawData) {
+  let entityName = rawData.entityName || 'Unknown Entity';
+  document.title = entityName;
+  document.querySelector('h1').textContent = entityName;
+
+  const sharesArray = rawData.units && rawData.units.shares ? rawData.units.shares : [];
+
+  // Filter for fy > "2020" and numeric val
+  const filtered = sharesArray.filter(s => {
+    if (s.fy && s.val !== undefined && s.val !== null) {
+      if (typeof s.val === 'number') {
+        return s.fy > '2020';
+      }
+    }
+    return false;
+  });
+
+  if (filtered.length === 0) {
+    // No valid data
+    document.getElementById('share-max-value').textContent = 'N/A';
+    document.getElementById('share-max-fy').textContent = 'N/A';
+    document.getElementById('share-min-value').textContent = 'N/A';
+    document.getElementById('share-min-fy').textContent = 'N/A';
+    return;
+  }
+
+  // Find max and min
+  let max = filtered[0];
+  let min = filtered[0];
+  filtered.forEach(s => {
+    if (s.val > max.val) {
+      max = s;
+    }
+    if (s.val < min.val) {
+      min = s;
+    }
+  });
+
+  // Save data.json structure
+  const output = {
+    entityName: entityName,
+    max: { val: max.val, fy: max.fy },
+    min: { val: min.val, fy: min.fy }
+  };
+
+  // Save to localStorage for demo purposes
+  localStorage.setItem('data_json', JSON.stringify(output));
+  // Populate UI
+  document.getElementById('share-entity-name').textContent = entityName;
+  document.getElementById('share-max-value').textContent = max.val;
+  document.getElementById('share-max-fy').textContent = max.fy;
+  document.getElementById('share-min-value').textContent = min.val;
+  document.getElementById('share-min-fy').textContent = min.fy;
+}
+
+// Load data on start
+async function init() {
+  await fetchData(CIK);
+}
+
+// Run on load
+window.onload = init;
+</script>
+</body>
+</html>
